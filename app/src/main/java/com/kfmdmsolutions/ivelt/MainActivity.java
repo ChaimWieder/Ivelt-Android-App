@@ -97,6 +97,9 @@ public class MainActivity extends AppCompatActivity implements SwipyRefreshLayou
     public static final WebkitCookieManagerProxy coreCookieManager = new WebkitCookieManagerProxy(null, java.net.CookiePolicy.ACCEPT_ALL);
     private boolean zoomed = false;
     private static final String TAG = MainActivity.class.getSimpleName();
+    // Flag to detect back/forward navigation so we can skip zoom/style injection
+    // that causes a layout reflow and resets the restored scroll position.
+    private boolean isHistoryNavigation = false;
     public static final int INPUT_FILE_REQUEST_CODE = 1;
     public static final String EXTRA_URL = "com.kdmfs.mainactivity.url";
     public static final String WEBVIEW_BUNDLE = "com.kdmfs.ivelt.MainActivity.webview.bundle";
@@ -671,6 +674,7 @@ public class MainActivity extends AppCompatActivity implements SwipyRefreshLayou
     @Override
     public void onBackPressed() {
         if (mywebView.canGoBack()) {
+            isHistoryNavigation = true;
             mywebView.goBack();
         } else {
             super.onBackPressed();
@@ -899,6 +903,19 @@ public class MainActivity extends AppCompatActivity implements SwipyRefreshLayou
             }
             super.onPageFinished(view, url);
             this.hideProgress();
+
+            // When navigating back/forward, the WebView restores the page from its
+            // back-forward cache including the scroll position. Injecting zoom JS or
+            // new stylesheets at this point forces a layout reflow which resets the
+            // scroll to the top. So we skip those injections for history navigations.
+            if (isHistoryNavigation) {
+                isHistoryNavigation = false;
+                if (!shouldLogout) {
+                    mywebView.setVisibility(View.VISIBLE);
+                }
+                return;
+            }
+
             DisplayMetrics metrics = getDisplayMetrics();
 
             metrics.widthPixels /= metrics.density;
@@ -1105,9 +1122,11 @@ public class MainActivity extends AppCompatActivity implements SwipyRefreshLayou
 
         private void singleFingerSwipe(boolean forward){
             if (forward && mywebView.canGoForward()){
+                isHistoryNavigation = true;
                 mywebView.goForward();
             }
             if (!forward && mywebView.canGoBack()){
+                isHistoryNavigation = true;
                 mywebView.goBack();
             }
         }
